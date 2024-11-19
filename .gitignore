@@ -50,3 +50,12 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+# Ignore project dataset
+LIU4K_train_1401_1500_png/
+
+# Ignore image output folder
+output_folder/
+
+# Ignore build folder
+build/
