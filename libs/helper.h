@@ -4,29 +4,52 @@
 #include <stdlib.h>
 #include <mpi/mpi.h>
 #include "grayscale.h"
+#include "sobel.h"
 
-void process_image_serial(const char *image_path) {
+void process_image_serial(const char *image_path, const char *image_processing_algorithm) {
     int width, height, channel;
-    
     // This function reads the image and stores the widht, height, channel into the variables we defined.
-    unsigned char *img = stbi_load(image_path, &width, &height, &channel, 0);
+    unsigned char *img, *sobel_img;
+    if (!strcmp(image_processing_algorithm, "sobel")) 
+    {
+        printf("Sobel algorithm chosen!\n");
+        sobel_img = stbi_load(image_path, &width, &height, &channel, 1);
+    }
+    else
+    {
+        img = stbi_load(image_path, &width, &height, &channel, 0);
+    }
 
-    if (img == NULL) {
+    if (img == NULL && sobel_img == NULL) {
         fprintf(stderr, "Error: Could not load image %s\n", image_path);
         return;
     }
 
     unsigned char *output = (unsigned char *)malloc(width * height * channel);
     const char* image_name = strrchr(image_path, '/');
+    char output_dir_name[256] = "output_folder/sobel_serial";
+    const char* output_dir = strcat(output_dir_name, image_name);
     printf("Loaded image: %s\n", image_path);
 
     // Perform some processing here
-    grayscale_serial(img, output, width, height, channel, "grayscale", image_name);
+    if (!strcmp(image_processing_algorithm, "grayscale")) 
+    {
+        grayscale_serial(img, output, width, height, channel, "grayscale", image_name);
+        stbi_image_free(img);
+    }
+    else if (!strcmp(image_processing_algorithm, "sobel")) 
+    {
+        sobel_filter(sobel_img, output, width, height);
+        // Save the image
+        printf("Saving image to: %s\n", output_dir);
+        create_output_directory("output_folder/sobel_serial/");
+        stbi_write_png(output_dir, width, height, 1, output, width);
+        stbi_image_free(sobel_img);
+    }
 
-    stbi_image_free(img);
 }
 
-void read_images_from_folder_serial(const char *folder_path) {
+void read_images_from_folder_serial(const char *folder_path, const char *image_processing_algorithm) {
     struct dirent *entry;
 
     DIR *dp = opendir(folder_path);
@@ -43,7 +66,7 @@ void read_images_from_folder_serial(const char *folder_path) {
             if (extension && strcmp(extension, ".png") == 0) {
                 char full_path[1024];
                 snprintf(full_path, sizeof(full_path), "%s/%s", folder_path, file_name);
-                process_image_serial(full_path);
+                process_image_serial(full_path, image_processing_algorithm);
             }
         }
     }
@@ -71,7 +94,7 @@ void process_image_omp(const char* image_path) {
     stbi_image_free(img);  // Free memory when done
 }
 
-void read_images_from_folder_omp(const char *folder_path) {
+void read_images_from_folder_omp(const char *folder_path, const char *image_processing_algorithm) {
 
     struct dirent **file_list;
     int n_files = scandir(folder_path, &file_list, NULL, alphasort);
@@ -144,7 +167,7 @@ char **read_filenames_mpi(const char *folder, int *num_files) {
 
 
 
-void read_images_from_folders_mpi(const char *folder_path) {
+void read_images_from_folders_mpi(const char *folder_path, const char *image_processing_algorithm) {
     int rank, total_processes;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &total_processes);
