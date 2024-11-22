@@ -1,16 +1,5 @@
 #include "grayscale.h"
 
-// Courtesy of stack overflow: https://stackoverflow.com/a/7430262
-// Create a directory if not already created
-void create_output_directory(const char *output_dir_name) {
-    
-    struct stat st = {0};
-    if (stat(output_dir_name, &st) == -1) {
-        mkdir(output_dir_name, 0700);
-    }
-
-}
-
 void grayscale_serial(unsigned char *buffer, unsigned char *output, int width, int height, int channels, const char *output_folder, const char *original_file) {
     for (int i = 0; i < width * height; i++) {
         int idx = i * channels;

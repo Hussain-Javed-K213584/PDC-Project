@@ -9,15 +9,15 @@ if [[ -z $1 || -z $2 ]]; then
 fi
 
 if [[ $2 == 'serial' ]]; then
-    mpicc main.c libs/grayscale.c libs/sobel.c -o build/main_serial -lm -fopenmp
+    mpicc main.c libs/grayscale.c libs/sobel.c libs/image.c -o build/main_serial -lm -fopenmp
     ./build/main_serial $1 serial $3
     exit 0;
 elif [[ $2 == 'omp' ]]; then
-    mpicc main.c libs/grayscale.c libs/sobel.c -o build/main_omp -lm -fopenmp
+    mpicc main.c libs/grayscale.c libs/sobel.c libs/image.c -o build/main_omp -lm -fopenmp
     ./build/main_omp $1 omp $3
     exit 0;
 elif [[ $2 == 'mpi' ]]; then
-    mpicc main.c libs/grayscale.c libs/sobel.c -o build/main_mpi -lm -fopenmp
+    mpicc main.c libs/grayscale.c libs/sobel.c libs/image.c libs/utility.c -o build/main_mpi -lm -fopenmp
     mpirun -np $4 ./build/main_mpi $1 mpi $3
     exit 0;
 else
