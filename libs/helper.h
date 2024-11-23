@@ -9,8 +9,9 @@
 #include "grayscale.h"
 #include "sobel.h"
 #include "negative.h"
+#include "otsu.h"
 
-void process_image_serial(const char *image_path, const char *image_processing_algorithm) {
+void process_image_serial(const char *image_path, const char *image_processing_algorithm, int otsu_threshold) {
     int width, height, channel;
     // This function reads the image and stores the widht, height, channel into the variables we defined.
     unsigned char *img, *sobel_img;
@@ -62,10 +63,15 @@ void process_image_serial(const char *image_path, const char *image_processing_a
         stbi_image_free(output);
         stbi_image_free(img);
     }
+    else if (!strcmp(image_processing_algorithm, "otsu"))
+    {
+        create_output_directory("output_folder/serial_otsu");
+        otsu_serial(img, image_name, otsu_threshold, width, height, channel);
+    }
 
 }
 
-void read_images_from_folder_serial(const char *folder_path, const char *image_processing_algorithm) {
+void read_images_from_folder_serial(const char *folder_path, const char *image_processing_algorithm, int otsu_threshold) {
     struct dirent *entry;
 
     DIR *dp = opendir(folder_path);
@@ -82,7 +88,7 @@ void read_images_from_folder_serial(const char *folder_path, const char *image_p
             if (extension && strcmp(extension, ".png") == 0) {
                 char full_path[1024];
                 snprintf(full_path, sizeof(full_path), "%s/%s", folder_path, file_name);
-                process_image_serial(full_path, image_processing_algorithm);
+                process_image_serial(full_path, image_processing_algorithm, otsu_threshold);
             }
         }
     }
@@ -90,7 +96,7 @@ void read_images_from_folder_serial(const char *folder_path, const char *image_p
     closedir(dp);
 }
 
-void process_image_omp(const char* image_path, const char* image_processing_algorithm) {
+void process_image_omp(const char* image_path, const char* image_processing_algorithm, int otsu_threshold) {
     int width, height, channels;
     const char* image_name = strrchr(image_path, '/');
     char output_dir_name[256];
@@ -158,9 +164,15 @@ void process_image_omp(const char* image_path, const char* image_processing_algo
         stbi_image_free(negative_image);
         stbi_image_free(output);
     }
+    else if (!strcmp(image_processing_algorithm, "otsu"))
+    {
+        unsigned char *img = stbi_load(image_path, &width, &height, &channels, 0);
+        create_output_directory("output_folder/omp_otsu");
+        otsu_omp(img, image_name, otsu_threshold, width, height, channels);
+    }
 }
 
-void read_images_from_folder_omp(const char *folder_path, const char *image_processing_algorithm) {
+void read_images_from_folder_omp(const char *folder_path, const char *image_processing_algorithm, int otsu_threshold) {
 
     struct dirent **file_list;
     int n_files = scandir(folder_path, &file_list, NULL, alphasort);
@@ -179,7 +191,7 @@ void read_images_from_folder_omp(const char *folder_path, const char *image_proc
             if (extension && strcmp(extension, ".png") == 0) {
                 char full_path[1024];
                 snprintf(full_path, sizeof(full_path), "%s/%s", folder_path, file_name);
-                process_image_omp(full_path, image_processing_algorithm);
+                process_image_omp(full_path, image_processing_algorithm, otsu_threshold);
             }
         }
 

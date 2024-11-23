@@ -7,7 +7,7 @@
 int main(int argc, char** argv) {
     if (argc != 4) {
         printf("No image folder provided: ./main <image folder path> serial | omp | mpi <algorithm>\n");
-        printf("Possible image processing algorithms are:\n1. sobel\n2. grayscale\n3. negative\n4. blur\n5. sepia\n");
+        printf("Possible image processing algorithms are:\n1. sobel\n2. grayscale\n3. negative\n4. blur\n5. otsu\n");
         return 1;
     }
 
@@ -18,12 +18,25 @@ int main(int argc, char** argv) {
     const char *folder_path = argv[1];
     const char *execution_type = argv[2];
     const char *image_processing_algorithm = argv[3];
+
+    int otsu_threshold = 0;
+    if (!strcmp(image_processing_algorithm, "otsu"))
+    {
+        printf("Please provide a threshold for otsu binarization (0 - 255): ");
+        scanf("%d", &otsu_threshold);
+        if (otsu_threshold < 0 || otsu_threshold > 255)
+        {
+            printf("Invalid value range. Image should be between 0 - 255. Current value provided: %d\n", otsu_threshold);
+            return 1;
+        }
+    }
+
     printf("The image path provided is: %s\n", folder_path);
     printf("Running algorithm %s on images\n", image_processing_algorithm);
     if (strcmp(execution_type, "serial") == 0) 
     {
         start = clock();
-        read_images_from_folder_serial(folder_path, image_processing_algorithm);
+        read_images_from_folder_serial(folder_path, image_processing_algorithm, otsu_threshold);
         finish = clock();
 
         serial_processing_time = (double)(finish - start) / CLOCKS_PER_SEC;
@@ -33,7 +46,7 @@ int main(int argc, char** argv) {
     {
         omp_start = omp_get_wtime();
 
-        read_images_from_folder_omp(folder_path, image_processing_algorithm);
+        read_images_from_folder_omp(folder_path, image_processing_algorithm, otsu_threshold);
 
         omp_finish = omp_get_wtime();
 
