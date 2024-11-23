@@ -418,4 +418,159 @@ void read_images_from_folders_mpi_sobel(const char *folder_path, const char *ima
     free(local_filename_list);
 }
 
+int read_images_from_folders_mpi_negative(const char* folder_path) 
+{
+    int rank, size;
+    char **filenames = NULL;
+    int num_files = 0;
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    // Create output directory if it doesn't exist
+    if (rank == 0) {
+        create_output_directory("output_folder/negative_mpi/");
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        // Root process reads the filenames
+        filenames = read_filenames_mpi(folder_path, &num_files);
+    }
+
+    // Broadcast the number of files to all processes
+    MPI_Bcast(&num_files, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // Distribute filenames among processes
+    int *sendcounts = NULL;
+    int *displs = NULL;
+    char *all_filenames = NULL;
+    int total_length = 0;
+
+    if (rank == 0) {
+        // Calculate the total length of all filenames
+        for (int i = 0; i < num_files; i++) {
+            total_length += strlen(filenames[i]) + 1; // +1 for null terminator
+        }
+
+        // Concatenate all filenames into a single buffer
+        all_filenames = (char *)malloc(total_length * sizeof(char));
+        char *ptr = all_filenames;
+        for (int i = 0; i < num_files; i++) {
+            strcpy(ptr, filenames[i]);
+            ptr += strlen(filenames[i]) + 1;
+        }
+
+        // Prepare sendcounts and displs for scattering
+        sendcounts = (int *)malloc(size * sizeof(int));
+        displs = (int *)malloc(size * sizeof(int));
+        int filenames_per_proc = num_files / size;
+        int remainder = num_files % size;
+        int offset = 0;
+
+        for (int i = 0; i < size; i++) {
+            int count = filenames_per_proc + (i < remainder ? 1 : 0);
+            sendcounts[i] = count;
+            displs[i] = offset;
+            offset += count;
+        }
+
+        // Adjust sendcounts and displs for character data
+        int *temp_sendcounts = (int *)malloc(size * sizeof(int));
+        int *temp_displs = (int *)malloc(size * sizeof(int));
+        offset = 0;
+        for (int i = 0; i < size; i++) {
+            temp_displs[i] = offset;
+            int count = 0;
+            int start = displs[i];
+            int end = start + sendcounts[i];
+            for (int j = start; j < end; j++) {
+                count += strlen(filenames[j]) + 1;
+            }
+            temp_sendcounts[i] = count;
+            offset += count;
+        }
+        free(sendcounts);
+        free(displs);
+        sendcounts = temp_sendcounts;
+        displs = temp_displs;
+    }
+
+    // Broadcast total_length to all processes
+    MPI_Bcast(&total_length, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // Each process receives its portion of filenames
+    int local_filenames_length = 0;
+    MPI_Scatter(sendcounts, 1, MPI_INT, &local_filenames_length, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    char *local_filenames = (char *)malloc(local_filenames_length * sizeof(char));
+    MPI_Scatterv(all_filenames, sendcounts, displs, MPI_CHAR,
+                 local_filenames, local_filenames_length, MPI_CHAR, 0, MPI_COMM_WORLD);
+
+    // Split local_filenames into an array
+    char **local_filename_list = NULL;
+    int local_file_count = 0;
+    char *ptr = local_filenames;
+    while (ptr < local_filenames + local_filenames_length) {
+        local_filename_list = (char **)realloc(local_filename_list, (local_file_count + 1) * sizeof(char *));
+        local_filename_list[local_file_count] = ptr;
+        ptr += strlen(ptr) + 1;
+        local_file_count++;
+    }
+
+    // Each process processes its assigned images
+    for (int i = 0; i < local_file_count; i++) {
+        printf("Rank %d is processing image: %s\n", rank, local_filename_list[i]);
+        fflush(stdout);
+
+        // Construct input and output paths
+        char input_path[256];
+        sprintf(input_path, "%s/%s", folder_path, local_filename_list[i]);
+
+        char output_path[256];
+        sprintf(output_path, "%s/negative_mpi/%s", "output_folder/", local_filename_list[i]);
+
+        int width, height, channels;
+        unsigned char *img = stbi_load(input_path, &width, &height, &channels, 0);
+        if (img == NULL) {
+            fprintf(stderr, "Error loading image %s\n", input_path);
+            continue;
+        }
+
+        size_t img_size = width * height * channels;
+        unsigned char *negative_img = (unsigned char *)malloc(img_size);
+        if (negative_img == NULL) {
+            fprintf(stderr, "Error allocating memory\n");
+            stbi_image_free(img);
+            continue;
+        }
+
+        // Apply negative filter using OpenMP
+        negative_omp(img, negative_img, width, height, channels);
+
+        // Save the negative image
+        if (!stbi_write_png(output_path, width, height, channels, negative_img, width * channels)) {
+            fprintf(stderr, "Error writing image %s\n", output_path);
+        }
+
+        // Clean up
+        stbi_image_free(img);
+        free(negative_img);
+    }
+
+    // Clean up
+    if (rank == 0) {
+        for (int i = 0; i < num_files; i++) {
+            free(filenames[i]);
+        }
+        free(filenames);
+        free(all_filenames);
+        free(sendcounts);
+        free(displs);
+        return rank;
+    }
+    free(local_filenames);
+    free(local_filename_list);
+}
+
 #endif

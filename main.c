@@ -14,6 +14,7 @@ int main(int argc, char** argv) {
     clock_t start, finish;
     double serial_processing_time;
     double omp_start, omp_finish, omp_processing_time;
+    double mpi_start, mpi_finish, mpi_processing_time;
     const char *folder_path = argv[1];
     const char *execution_type = argv[2];
     const char *image_processing_algorithm = argv[3];
@@ -45,18 +46,46 @@ int main(int argc, char** argv) {
         if (!strcmp(image_processing_algorithm, "grayscale"))
         {
             MPI_Init(&argc, &argv);
+            
+            mpi_start = MPI_Wtime();
 
             read_images_from_folders_mpi(folder_path, image_processing_algorithm);
 
+            mpi_finish = MPI_Wtime();
+
             MPI_Finalize();
+
+            mpi_processing_time = mpi_finish - mpi_start;
+            printf("Total time taken to apply %s on 100 images using %s method: %lf\n", image_processing_algorithm, execution_type, mpi_processing_time);
         }
         else if (!strcmp(image_processing_algorithm, "sobel"))
         {
             MPI_Init(&argc, &argv);
             
+            mpi_start = MPI_Wtime();
             read_images_from_folders_mpi_sobel(folder_path, image_processing_algorithm);
 
+            mpi_finish = MPI_Wtime();
             MPI_Finalize();
+
+            mpi_processing_time = mpi_finish - mpi_start;
+            printf("Total time taken to apply %s on 100 images using %s method: %lf\n", image_processing_algorithm, execution_type, mpi_processing_time);
+        }
+        else if (!strcmp(image_processing_algorithm, "negative"))
+        {
+            MPI_Init(&argc, &argv);
+            
+            MPI_Barrier(MPI_COMM_WORLD);
+            mpi_start = MPI_Wtime();
+            int rank = read_images_from_folders_mpi_negative(folder_path);
+            MPI_Barrier(MPI_COMM_WORLD);
+            mpi_finish = MPI_Wtime();
+            MPI_Finalize();
+
+            mpi_processing_time = mpi_finish - mpi_start;
+            if (rank == 0) {
+                printf("Total time taken to apply %s on 100 images using %s method: %lf\n", image_processing_algorithm, execution_type, mpi_processing_time);
+            }
         }
     }
     return 0;
