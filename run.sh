@@ -18,6 +18,7 @@ elif [[ $2 == 'omp' ]]; then
     exit 0;
 elif [[ $2 == 'mpi' ]]; then
     mpicc main.c libs/grayscale.c libs/sobel.c libs/image.c libs/utility.c libs/negative.c -o build/main_mpi -lm -fopenmp
+
     mpirun -np $4 ./build/main_mpi $1 mpi $3
     exit 0;
 else

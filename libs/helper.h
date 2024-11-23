@@ -158,7 +158,6 @@ void process_image_omp(const char* image_path, const char* image_processing_algo
         stbi_image_free(negative_image);
         stbi_image_free(output);
     }
-
 }
 
 void read_images_from_folder_omp(const char *folder_path, const char *image_processing_algorithm) {
