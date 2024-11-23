@@ -245,7 +245,7 @@ char **read_filenames_mpi(const char *folder, int *num_files) {
 
 
 
-void read_images_from_folders_mpi(const char *folder_path, const char *image_processing_algorithm) {
+int read_images_from_folders_mpi(const char *folder_path, const char *image_processing_algorithm) {
     int rank, total_processes;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &total_processes);
@@ -292,6 +292,7 @@ void read_images_from_folders_mpi(const char *folder_path, const char *image_pro
         free(filenames[i]);
     }
     free(filenames);
+    if (rank == 0) return rank;
 }
 
 char **read_filenames_sobel(const char *folder, int *num_files) {
@@ -319,7 +320,7 @@ char **read_filenames_sobel(const char *folder, int *num_files) {
 }
 
 
-void read_images_from_folders_mpi_sobel(const char *folder_path, const char *image_processing_algorithm) {
+int read_images_from_folders_mpi_sobel(const char *folder_path, const char *image_processing_algorithm) {
     int rank, size;
     char **filenames = NULL;
     int num_files = 0;
@@ -428,6 +429,7 @@ void read_images_from_folders_mpi_sobel(const char *folder_path, const char *ima
     }
     free(local_filenames);
     free(local_filename_list);
+    if (rank == 0) return rank;
 }
 
 int read_images_from_folders_mpi_negative(const char* folder_path) 
@@ -585,4 +587,188 @@ int read_images_from_folders_mpi_negative(const char* folder_path)
     free(local_filename_list);
 }
 
+int read_images_from_folders_mpi_otsu(const char *INPUT_FOLDER, const char *OUTPUT_FOLDER, int user_threshold)
+{
+    int rank, size;
+    char **filenames = NULL;
+    int num_files = 0;
+
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    create_output_directory(OUTPUT_FOLDER);
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    // Root process reads the filenames
+    if (rank == 0) {
+        filenames = read_filenames_mpi(INPUT_FOLDER, &num_files);
+    }
+
+    // Broadcast the number of files to all processes
+    MPI_Bcast(&num_files, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // Distribute filenames among processes
+    int *sendcounts = NULL;
+    int *displs = NULL;
+    char *all_filenames = NULL;
+    int total_length = 0;
+
+    if (rank == 0) {
+        // Calculate the total length of all filenames
+        for (int i = 0; i < num_files; i++) {
+            total_length += strlen(filenames[i]) + 1; // +1 for null terminator
+        }
+
+        // Concatenate all filenames into a single buffer
+        all_filenames = (char *)malloc(total_length * sizeof(char));
+        char *ptr = all_filenames;
+        for (int i = 0; i < num_files; i++) {
+            strcpy(ptr, filenames[i]);
+            ptr += strlen(filenames[i]) + 1;
+        }
+
+        // Prepare sendcounts and displs for scattering
+        sendcounts = (int *)malloc(size * sizeof(int));
+        displs = (int *)malloc(size * sizeof(int));
+        int filenames_per_proc = num_files / size;
+        int remainder = num_files % size;
+        int offset = 0;
+
+        for (int i = 0; i < size; i++) {
+            int count = filenames_per_proc + (i < remainder ? 1 : 0);
+            sendcounts[i] = count;
+            displs[i] = offset;
+            offset += count;
+        }
+
+        // Adjust sendcounts and displs for character data
+        int *temp_sendcounts = (int *)malloc(size * sizeof(int));
+        int *temp_displs = (int *)malloc(size * sizeof(int));
+        offset = 0;
+        for (int i = 0; i < size; i++) {
+            temp_displs[i] = offset;
+            int count = 0;
+            int start = displs[i];
+            int end = start + sendcounts[i];
+            for (int j = start; j < end; j++) {
+                count += strlen(filenames[j]) + 1;
+            }
+            temp_sendcounts[i] = count;
+            offset += count;
+        }
+        free(sendcounts);
+        free(displs);
+        sendcounts = temp_sendcounts;
+        displs = temp_displs;
+    }
+
+    // Broadcast total_length to all processes
+    MPI_Bcast(&total_length, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    // Each process receives its portion of filenames
+    int local_filenames_length = 0;
+    MPI_Scatter(sendcounts, 1, MPI_INT, &local_filenames_length, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    char *local_filenames = (char *)malloc(local_filenames_length * sizeof(char));
+    MPI_Scatterv(all_filenames, sendcounts, displs, MPI_CHAR,
+                 local_filenames, local_filenames_length, MPI_CHAR, 0, MPI_COMM_WORLD);
+
+    // Split local_filenames into an array
+    char **local_filename_list = NULL;
+    int local_file_count = 0;
+    char *ptr = local_filenames;
+    while (ptr < local_filenames + local_filenames_length) {
+        local_filename_list = (char **)realloc(local_filename_list, (local_file_count + 1) * sizeof(char *));
+        local_filename_list[local_file_count] = ptr;
+        ptr += strlen(ptr) + 1;
+        local_file_count++;
+    }
+
+    // Each process processes its assigned images
+    for (int i = 0; i < local_file_count; i++) {
+        printf("Rank %d is processing image: %s\n", rank, local_filename_list[i]);
+        fflush(stdout);
+
+        // Construct input and output paths
+        char input_path[256];
+        sprintf(input_path, "%s/%s", INPUT_FOLDER, local_filename_list[i]);
+
+        char output_path[256];
+        sprintf(output_path, "%s/otsu_%s", OUTPUT_FOLDER, local_filename_list[i]);
+
+        int width, height, channels;
+        unsigned char *img = stbi_load(input_path, &width, &height, &channels, 0);
+        if (img == NULL) {
+            fprintf(stderr, "Rank %d: Error loading image %s\n", rank, input_path);
+            continue;
+        }
+
+        // Convert to grayscale if necessary
+        unsigned char *gray_img = NULL;
+        if (channels == 1) {
+            gray_img = img;
+        } else {
+            gray_img = (unsigned char *)malloc(width * height);
+            if (gray_img == NULL) {
+                fprintf(stderr, "Rank %d: Error allocating memory\n", rank);
+                stbi_image_free(img);
+                continue;
+            }
+
+            // Parallelize the grayscale conversion
+            #pragma omp parallel for
+            for (int idx = 0; idx < width * height; idx++) {
+                int idx_img = idx * channels;
+                int r = img[idx_img];
+                int g = img[idx_img + 1];
+                int b = img[idx_img + 2];
+                gray_img[idx] = (r + g + b) / 3;
+            }
+
+            stbi_image_free(img);
+        }
+
+        // Compute Otsu's threshold if user_threshold is 0
+        int threshold;
+        if (user_threshold == 0) {
+            threshold = compute_otsu_threshold_omp(gray_img, width, height);
+            printf("Rank %d: Computed Otsu's threshold: %d for image %s\n", rank, threshold, local_filename_list[i]);
+        } else {
+            threshold = user_threshold;
+            printf("Rank %d: Using user-provided threshold: %d for image %s\n", rank, threshold, local_filename_list[i]);
+        }
+
+        // Apply threshold
+        unsigned char *binary_img = (unsigned char *)malloc(width * height);
+        if (binary_img == NULL) {
+            fprintf(stderr, "Rank %d: Error allocating memory\n", rank);
+            if (channels != 1) free(gray_img);
+            continue;
+        }
+        apply_threshold_omp(gray_img, binary_img, width, height, threshold);
+
+        // Save the binary image
+        if (!stbi_write_png(output_path, width, height, 1, binary_img, width)) {
+            fprintf(stderr, "Rank %d: Error writing image %s\n", rank, output_path);
+        }
+
+        // Clean up
+        if (channels != 1) free(gray_img);
+        free(binary_img);
+    }
+
+    // Clean up
+    if (rank == 0) {
+        for (int i = 0; i < num_files; i++) {
+            free(filenames[i]);
+        }
+        free(filenames);
+        free(all_filenames);
+        free(sendcounts);
+        free(displs);
+    }
+    free(local_filenames);
+    free(local_filename_list);
+    if (rank == 0) return rank;
+}
 #endif

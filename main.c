@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
     const char *image_processing_algorithm = argv[3];
 
     int otsu_threshold = 0;
-    if (!strcmp(image_processing_algorithm, "otsu"))
+    if (!strcmp(image_processing_algorithm, "otsu") && strcmp(execution_type, "mpi"))
     {
         printf("Please provide a threshold for otsu binarization (0 - 255): ");
         scanf("%d", &otsu_threshold);
@@ -62,7 +62,7 @@ int main(int argc, char** argv) {
             
             mpi_start = MPI_Wtime();
 
-            read_images_from_folders_mpi(folder_path, image_processing_algorithm);
+            int rank = read_images_from_folders_mpi(folder_path, image_processing_algorithm);
 
             mpi_finish = MPI_Wtime();
 
@@ -76,7 +76,7 @@ int main(int argc, char** argv) {
             MPI_Init(&argc, &argv);
             
             mpi_start = MPI_Wtime();
-            read_images_from_folders_mpi_sobel(folder_path, image_processing_algorithm);
+            int rank = read_images_from_folders_mpi_sobel(folder_path, image_processing_algorithm);
 
             mpi_finish = MPI_Wtime();
             MPI_Finalize();
@@ -91,6 +91,21 @@ int main(int argc, char** argv) {
             MPI_Barrier(MPI_COMM_WORLD);
             mpi_start = MPI_Wtime();
             int rank = read_images_from_folders_mpi_negative(folder_path);
+            MPI_Barrier(MPI_COMM_WORLD);
+            mpi_finish = MPI_Wtime();
+            MPI_Finalize();
+
+            mpi_processing_time = mpi_finish - mpi_start;
+            if (rank == 0) {
+                printf("Total time taken to apply %s on 100 images using %s method: %lf\n", image_processing_algorithm, execution_type, mpi_processing_time);
+            }
+        }
+        else if (!strcmp(image_processing_algorithm, "otsu"))
+        {
+            MPI_Init(&argc, &argv);
+            MPI_Barrier(MPI_COMM_WORLD);
+            mpi_start = MPI_Wtime();
+            int rank = read_images_from_folders_mpi_otsu(folder_path, "output_folder/mpi_otsu", 0);
             MPI_Barrier(MPI_COMM_WORLD);
             mpi_finish = MPI_Wtime();
             MPI_Finalize();
