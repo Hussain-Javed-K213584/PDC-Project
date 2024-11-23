@@ -4,7 +4,7 @@ echo "Choose method of program execution";
 
 if [[ -z $1 || -z $2 ]]; then
     echo "Provide image folder: ./run.sh <image_path> serial | omp | mpi <algorithm> <mpi_procs>";
-    printf "Possible image processing algorithms are: grayscale, sobel, blur, otsu, negative\n";
+    printf "Possible image processing algorithms are: grayscale, sobel, otsu, negative\n";
     exit 1;
 fi
 

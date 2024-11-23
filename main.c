@@ -7,7 +7,7 @@
 int main(int argc, char** argv) {
     if (argc != 4) {
         printf("No image folder provided: ./main <image folder path> serial | omp | mpi <algorithm>\n");
-        printf("Possible image processing algorithms are:\n1. sobel\n2. grayscale\n3. negative\n4. blur\n5. otsu\n");
+        printf("Possible image processing algorithms are:\n1. sobel\n2. grayscale\n3. negative\n4. otsu\n");
         return 1;
     }
 
