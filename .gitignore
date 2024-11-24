@@ -52,7 +52,7 @@ Mkfile.old
 dkms.conf
 
 # Ignore project dataset
-LIU4K_train_1401_1500_png/
+images/
 
 # Ignore image output folder
 output_folder/
