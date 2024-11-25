@@ -56,6 +56,7 @@ images/
 
 # Ignore image output folder
 output_folder/
+grayscale/
 
 # Ignore build folder
 build/

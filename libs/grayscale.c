@@ -45,6 +45,7 @@ void process_image_mpi(const char *filename, const char *input_folder) {
     size_t img_size = width * height * channels;
     unsigned char *gray_img = (unsigned char *)malloc(width * height);
 
+    #pragma omp for
     for (size_t i = 0; i < width * height; i++) {
         int idx = i * channels;
         int r = img[idx];

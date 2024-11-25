@@ -22,7 +22,8 @@ void process_image_serial(const char *image_path, const char *image_processing_a
     }
     else
     {
-        img = stbi_load(image_path, &width, &height, &channel, 0);
+        img = stbi_load(image_path, &width, &height, &channel, 3);
+        channel = 3; // force 3 channels
     }
 
     if (img == NULL && sobel_img == NULL) {
@@ -40,8 +41,10 @@ void process_image_serial(const char *image_path, const char *image_processing_a
     // Perform some processing here
     if (!strcmp(image_processing_algorithm, "grayscale")) 
     {
+        printf("Image loaded having (width: %d, height: %d, channels: %d)\n", width, height, channel);
         grayscale_serial(img, output, width, height, channel, "grayscale", image_name);
         stbi_image_free(img);
+        stbi_image_free(output);
     }
     else if (!strcmp(image_processing_algorithm, "sobel")) 
     {
@@ -116,6 +119,7 @@ void process_image_omp(const char* image_path, const char* image_processing_algo
         unsigned char *output = (unsigned char *)malloc(width * height * channels);
         grayscale_openmp(img, output, width, height, channels, "output_folder/grayscale_omp", image_name);
         stbi_image_free(img);  // Free memory when done
+        stbi_image_free(output);
     }
     else if (!strcmp(image_processing_algorithm, "sobel"))
     {
